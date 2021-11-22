@@ -3,17 +3,17 @@
 但是大多数序列化推荐模型都有一个简化的假设，即这些模型都将交互历史视为一个有顺序的序列，没有考虑这个序列中交互物品之间的时间间隔（即只是建模了时间顺序没有考虑实际上的时间戳）。
 本论文提出的方法TiSASRec (Time Interval Aware Self-Attention for Sequential Recommendation), 不仅考虑物品的绝对位置,还考虑序列中物品之间的时间间隔
 ## 2. 复现精度
-目标精度 (NDCG@10：0.5706，Hit@10：0.8038)
+- 目标精度 (NDCG@10：0.5706，Hit@10：0.8038)
+- 复现 (NDCG@10: 0.5712, HR@10: 0.8055)
 ## 3. 数据集
 ml-1m
 ## 4. 环境依赖
-paddlepaddle-gpu=2.2.0.post101
+paddlepaddle-gpu=2.2.0
 ## 6. 训练评估
 ```
 nohup python main.py --dataset=ml-1m --train_dir=default --seed 6 > train.log &
 ```
-### 训练日志
-- 文件：train.log
+### 部分日志
 ```
 epoch:20, time: 60.191668(s), valid (NDCG@10: 0.5411, HR@10: 0.7879), test (NDCG@10: 0.5101, HR@10: 0.7588)
 epoch:40, time: 121.114241(s), valid (NDCG@10: 0.5792, HR@10: 0.8156), test (NDCG@10: 0.5540, HR@10: 0.7894)
