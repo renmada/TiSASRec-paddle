@@ -22,6 +22,7 @@ epoch:80, time: 241.794130(s), valid (NDCG@10: 0.5922, HR@10: 0.8204), test (NDC
 epoch:100, time: 303.143580(s), valid (NDCG@10: 0.5943, HR@10: 0.8210), test (NDCG@10: 0.5712, HR@10: 0.8055)
 epoch:120, time: 364.157205(s), valid (NDCG@10: 0.5970, HR@10: 0.8224), test (NDCG@10: 0.5723, HR@10: 0.8005)
 ```
+# 引用原论文
 ```
 @inproceedings{li2020time,
   title={Time Interval Aware Self-Attention for Sequential Recommendation},
