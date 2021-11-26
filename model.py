@@ -49,14 +49,25 @@ class TimeAwareMultiHeadAttention(paddle.nn.Layer):
         Q, K, V = self.Q_w(queries), self.K_w(keys), self.V_w(keys)
 
         # head dim * batch dim for parallelization (h*N, T, C/h)
-        Q_ = paddle.concat(paddle.split(Q, self.head_num, axis=2), axis=0)
-        K_ = paddle.concat(paddle.split(K, self.head_num, axis=2), axis=0)
-        V_ = paddle.concat(paddle.split(V, self.head_num, axis=2), axis=0)
+        if self.head_num > 1:
 
-        time_matrix_K_ = paddle.concat(paddle.split(time_matrix_K, self.head_num, axis=3), axis=0)
-        time_matrix_V_ = paddle.concat(paddle.split(time_matrix_V, self.head_num, axis=3), axis=0)
-        abs_pos_K_ = paddle.concat(paddle.split(abs_pos_K, self.head_num, axis=2), axis=0)
-        abs_pos_V_ = paddle.concat(paddle.split(abs_pos_V, self.head_num, axis=2), axis=0)
+            Q_ = paddle.concat(paddle.split(Q, self.head_num, axis=2), axis=0)
+            K_ = paddle.concat(paddle.split(K, self.head_num, axis=2), axis=0)
+            V_ = paddle.concat(paddle.split(V, self.head_num, axis=2), axis=0)
+
+            time_matrix_K_ = paddle.concat(paddle.split(time_matrix_K, self.head_num, axis=3), axis=0)
+            time_matrix_V_ = paddle.concat(paddle.split(time_matrix_V, self.head_num, axis=3), axis=0)
+            abs_pos_K_ = paddle.concat(paddle.split(abs_pos_K, self.head_num, axis=2), axis=0)
+            abs_pos_V_ = paddle.concat(paddle.split(abs_pos_V, self.head_num, axis=2), axis=0)
+        else:
+            Q_ = Q
+            K_ = K
+            V_ = V
+            time_matrix_K_ = time_matrix_K
+            time_matrix_V_ = time_matrix_V
+            abs_pos_K_ = abs_pos_K
+            abs_pos_V_ = abs_pos_V
+
         # print(Q_.shape, time_matrix_K_.shape, abs_pos_K_.shape)
 
         # batched channel wise matmul to gen attention weights
@@ -71,10 +82,10 @@ class TimeAwareMultiHeadAttention(paddle.nn.Layer):
         # 0 * inf = nan, then reduce_sum([nan,...]) = nan
 
         # time_mask = time_mask.unsqueeze(-1).expand(attn_weights.shape[0], -1, attn_weights.shape[-1])
-        time_mask = time_mask.unsqueeze(-1).tile([self.head_num, 1, 1])
-        time_mask = time_mask.expand([-1, -1, attn_weights.shape[-1]])
+        time_mask = time_mask.astype('int32').unsqueeze(-1).tile([self.head_num, 1, 1])
+        time_mask = time_mask.expand([-1, -1, attn_weights.shape[-1]]).astype(paddle.bool)
         # print(attn_mask.shape)
-        attn_mask = attn_mask.unsqueeze(0).expand([attn_weights.shape[0], -1, -1])
+        attn_mask = attn_mask.astype('int32').unsqueeze(0).expand([attn_weights.shape[0], -1, -1]).astype(paddle.bool)
         # print(attn_mask.shape)
         paddings = paddle.ones(attn_weights.shape) * (-2 ** 32 + 1)  # -1e23 # float('-inf')
         # print(attn_mask.shape, paddings.shape, attn_weights.shape)
@@ -91,8 +102,8 @@ class TimeAwareMultiHeadAttention(paddle.nn.Layer):
         outputs += attn_weights.unsqueeze(2).matmul(time_matrix_V_).reshape(outputs.shape).squeeze(2)
 
         # (num_head * N, T, C / num_head) -> (N, T, C)
-        outputs = paddle.concat(paddle.split(outputs, self.head_num, axis=0), axis=2)  # div batch_size
-
+        if self.head_num > 1:
+            outputs = paddle.concat(paddle.split(outputs, self.head_num, axis=0), axis=2)  # div batch_size
         return outputs
 
 
@@ -106,17 +117,22 @@ class TiSASRec(paddle.nn.Layer):
 
         # TODO: loss += args.l2_emb for regularizing embedding vectors during training
         self.item_emb = paddle.nn.Embedding(self.item_num + 1, args.hidden_units, padding_idx=0,
-                                    weight_attr=paddle.ParamAttr(initializer=paddle.nn.initializer.XavierUniform()))
+                                            weight_attr=paddle.ParamAttr(
+                                                initializer=paddle.nn.initializer.XavierUniform()))
         self.item_emb_dropout = paddle.nn.Dropout(p=args.dropout_rate)
 
         self.abs_pos_K_emb = paddle.nn.Embedding(args.maxlen, args.hidden_units,
-                                    weight_attr=paddle.ParamAttr(initializer=paddle.nn.initializer.XavierUniform()))
+                                                 weight_attr=paddle.ParamAttr(
+                                                     initializer=paddle.nn.initializer.XavierUniform()))
         self.abs_pos_V_emb = paddle.nn.Embedding(args.maxlen, args.hidden_units,
-                                    weight_attr=paddle.ParamAttr(initializer=paddle.nn.initializer.XavierUniform()))
+                                                 weight_attr=paddle.ParamAttr(
+                                                     initializer=paddle.nn.initializer.XavierUniform()))
         self.time_matrix_K_emb = paddle.nn.Embedding(args.time_span + 1, args.hidden_units,
-                                    weight_attr=paddle.ParamAttr(initializer=paddle.nn.initializer.XavierUniform()))
+                                                     weight_attr=paddle.ParamAttr(
+                                                         initializer=paddle.nn.initializer.XavierUniform()))
         self.time_matrix_V_emb = paddle.nn.Embedding(args.time_span + 1, args.hidden_units,
-                                    weight_attr=paddle.ParamAttr(initializer=paddle.nn.initializer.XavierUniform()))
+                                                     weight_attr=paddle.ParamAttr(
+                                                         initializer=paddle.nn.initializer.XavierUniform()))
 
         self.item_emb_dropout = paddle.nn.Dropout(p=args.dropout_rate)
         self.abs_pos_K_emb_dropout = paddle.nn.Dropout(p=args.dropout_rate)
@@ -150,11 +166,10 @@ class TiSASRec(paddle.nn.Layer):
             # self.pos_sigmoid = paddle.nn.Sigmoid()
             # self.neg_sigmoid = paddle.nn.Sigmoid()
 
-    def seq2feats(self, user_ids, log_seqs, time_matrices):
+    def seq2feats(self, log_seqs, time_matrices):
         seqs = self.item_emb(paddle.to_tensor(log_seqs).astype(paddle.int64))
         seqs *= self.item_emb._embedding_dim ** 0.5
         seqs = self.item_emb_dropout(seqs)
-
         positions = np.tile(np.array(range(log_seqs.shape[1])), [log_seqs.shape[0], 1])
         positions = paddle.to_tensor(positions).astype(paddle.int64)
         abs_pos_K = self.abs_pos_K_emb(positions)
@@ -199,8 +214,8 @@ class TiSASRec(paddle.nn.Layer):
 
         return log_feats
 
-    def forward(self, user_ids, log_seqs, time_matrices, pos_seqs, neg_seqs):  # for training
-        log_feats = self.seq2feats(user_ids, log_seqs, time_matrices)
+    def forward(self, log_seqs, time_matrices, pos_seqs, neg_seqs):  # for training
+        log_feats = self.seq2feats( log_seqs, time_matrices)
         pos_embs = self.item_emb(paddle.to_tensor(pos_seqs).astype(paddle.int64))
         neg_embs = self.item_emb(paddle.to_tensor(neg_seqs).astype(paddle.int64))
 
@@ -212,8 +227,8 @@ class TiSASRec(paddle.nn.Layer):
 
         return pos_logits, neg_logits  # pos_pred, neg_pred
 
-    def predict(self, user_ids, log_seqs, time_matrices, item_indices):  # for inference
-        log_feats = self.seq2feats(user_ids, log_seqs, time_matrices)
+    def predict(self, log_seqs, time_matrices, item_indices):  # for inference
+        log_feats = self.seq2feats(log_seqs, time_matrices)
 
         final_feat = log_feats[:, -1, :]  # only use last QKV classifier, a waste
 

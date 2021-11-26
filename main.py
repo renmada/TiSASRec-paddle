@@ -47,6 +47,7 @@ f.close()
 
 dataset = data_partition(args.dataset)
 [user_train, user_valid, user_test, usernum, itemnum, timenum] = dataset
+
 num_batch = len(user_train) // args.batch_size
 cc = 0.0
 for u in user_train:
@@ -66,58 +67,29 @@ except:
 sampler = WarpSampler(user_train, usernum, itemnum, relation_matrix, batch_size=args.batch_size, maxlen=args.maxlen,
                       n_workers=3)
 model = TiSASRec(usernum, itemnum, itemnum, args)
-
-# for name, param in model.named_parameters():
-#     try:
-#         paddle.nn.init.xavier_uniform_(param.data)
-#     except:
-#         pass  # just ignore those failed init layers
-
+print(usernum, itemnum)
 model.train()  # enable model training
 epoch_start_idx = 1
-# if args.state_dict_path is not None:
-#     try:
-#         model.load_state_dict(paddle.load(args.state_dict_path))
-#         tail = args.state_dict_path[args.state_dict_path.find('epoch=') + 6:]
-#         epoch_start_idx = int(tail[:tail.find('.')]) + 1
-#     except:
-#         print('failed loading state_dicts, pls check file path: ', end="")
-#         print(args.state_dict_path)
-#
-# if args.inference_only:
-#     model.eval()
-#     t_test = evaluate(model, dataset, args)
-#     print('test (NDCG@10: %.4f, HR@10: %.4f)' % (t_test[0], t_test[1]))
 
 bce_criterion = paddle.nn.BCEWithLogitsLoss()
 adam_optimizer = paddle.optimizer.Adam(parameters=model.parameters(), learning_rate=args.lr, beta1=0.9, beta2=0.98)
 
 T = 0.0
 t0 = time.time()
-# model.set_dict(paddle.load('model.bin'))
-# inp = pd.read_pickle('../TiSASRec.pytorch-master/sample.pkl')
-# model.eval()
-# with paddle.no_grad():
-#     pos_logits, neg_logits = model(*inp)
-# print(pos_logits.reshape([-1])[:10])
-# assert 0
-
-
+best = 0
 
 for epoch in range(epoch_start_idx, args.num_epochs + 1):
-    if args.inference_only: break  # just to decrease identition
-    for step in range(num_batch):  # tqdm(range(num_batch), total=num_batch, ncols=70, leave=False, unit='b'):
+    for step in range(num_batch):
         u, seq, time_seq, time_matrix, pos, neg = sampler.next_batch()  # tuples to ndarray
         u, seq, pos, neg = np.array(u), np.array(seq), np.array(pos), np.array(neg)
         time_seq, time_matrix = np.array(time_seq), np.array(time_matrix)
-
-        pos_logits, neg_logits = model(u, seq, time_matrix, pos, neg)
+        pos_logits, neg_logits = model(seq, time_matrix, pos, neg)
         pos_labels, neg_labels = paddle.ones(pos_logits.shape), paddle.zeros(neg_logits.shape)
         # print("\neye ball check raw_logits:"); print(pos_logits); print(neg_logits) # check pos_logits > 0, neg_logits < 0
         adam_optimizer.clear_grad()
         indices = paddle.to_tensor(pos != 0)
-        loss = bce_criterion(paddle.masked_select(pos_logits,indices), paddle.masked_select(pos_labels,indices))
-        loss += bce_criterion(paddle.masked_select(neg_logits,indices), paddle.masked_select(neg_labels,indices))
+        loss = bce_criterion(paddle.masked_select(pos_logits, indices), paddle.masked_select(pos_labels, indices))
+        loss += bce_criterion(paddle.masked_select(neg_logits, indices), paddle.masked_select(neg_labels, indices))
         for param in model.item_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
         for param in model.abs_pos_K_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
         for param in model.abs_pos_V_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
@@ -137,18 +109,25 @@ for epoch in range(epoch_start_idx, args.num_epochs + 1):
         t_valid = evaluate_valid(model, dataset, args)
         print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f)'
               % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1]))
-
+        if t_test[1] > best:
+            best = t_test[1]
+            paddle.save(model.state_dict(), os.path.join(args.dataset + '_' + args.train_dir, 'best_model.pdparams'))
         f.write(str(t_valid) + ' ' + str(t_test) + '\n')
         f.flush()
         t0 = time.time()
         model.train()
 
-    if epoch == args.num_epochs:
-        folder = args.dataset + '_' + args.train_dir
-        fname = 'TiSASRec.epoch={}.lr={}.layer={}.head={}.hidden={}.maxlen={}.pth'
-        fname = fname.format(args.num_epochs, args.lr, args.num_blocks, args.num_heads, args.hidden_units, args.maxlen)
-        paddle.save(model.state_dict(), os.path.join(folder, fname))
-
 f.close()
 sampler.close()
-print("Done")
+
+print("Export model")
+model.set_state_dict(paddle.load(os.path.join(args.dataset + '_' + args.train_dir, 'best_model.pdparams')))
+paddle.jit.save(
+    model,
+    'PI',
+    input_spec=[
+        paddle.static.InputSpec(shape=seq.shape, dtype='int32'),
+        paddle.static.InputSpec(shape=time_matrix.shape, dtype='int32'),
+        paddle.static.InputSpec(shape=pos.shape, dtype='int32'),
+        paddle.static.InputSpec(shape=neg.shape, dtype='int32'),
+    ])

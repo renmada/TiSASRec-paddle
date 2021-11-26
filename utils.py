@@ -245,8 +245,7 @@ def evaluate(model, dataset, args):
             item_idx.append(t)
 
         time_matrix = computeRePos(time_seq, args.time_span)
-
-        predictions = -model.predict(*[np.array(l) for l in [[u], [seq], [time_matrix], item_idx]])
+        predictions = -model.predict(*[np.array(l) for l in [[seq], [time_matrix], item_idx]])
         predictions = predictions[0]
 
         rank = predictions.argsort().argsort()[0].item()
@@ -295,7 +294,7 @@ def evaluate_valid(model, dataset, args):
             item_idx.append(t)
 
         time_matrix = computeRePos(time_seq, args.time_span)
-        predictions = -model.predict(*[np.array(l) for l in [[u], [seq], [time_matrix], item_idx]])
+        predictions = -model.predict(*[np.array(l) for l in [[seq], [time_matrix], item_idx]])
         predictions = predictions[0]
 
         rank = predictions.argsort().argsort()[0].item()
