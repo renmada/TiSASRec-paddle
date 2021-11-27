@@ -30,7 +30,10 @@ bash test_tipc/test_train_inference_python.sh ./test_tipc/configs/tisas/train_in
 ## 8. 精度对齐
 ```
 python compare.py
-````
+
+# pos_logits的精度误差为2.504792178115167e-07
+# neg_logits的精度误差为2.504792178115167e-07
+# loss的精度误差为2.384185791015625e-07
 ```
 # 引用原论文
 ```
