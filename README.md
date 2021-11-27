@@ -26,7 +26,10 @@ epoch:140, time: 434.958108(s), valid (NDCG@10: 0.5990, HR@10: 0.8227), test (ND
 cd PaddleRec
 bash test_tipc/prepare.sh ./test_tipc/configs/tisas/train_infer_python.txt 'lite_train_lite_infer'
 bash test_tipc/test_train_inference_python.sh ./test_tipc/configs/tisas/train_infer_python.txt 'lite_train_lite_infer'
-
+## 8. 精度对齐
+```
+python compare.py
+````
 ```
 # 引用原论文
 ```
