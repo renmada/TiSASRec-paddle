@@ -35,7 +35,7 @@ parser.add_argument('--state_dict_path', default=None, type=str)
 parser.add_argument('--time_span', default=256, type=int)
 parser.add_argument('--seed', default=128, type=int)
 
-paddle.set_device('gpu')
+# paddle.set_device('gpu')
 args = parser.parse_args()
 set_seed(args.seed)
 
@@ -68,66 +68,56 @@ sampler = WarpSampler(user_train, usernum, itemnum, relation_matrix, batch_size=
                       n_workers=3)
 model = TiSASRec(usernum, itemnum, itemnum, args)
 print(usernum, itemnum)
-model.train()  # enable model training
-epoch_start_idx = 1
+if __name__ == '__main__':
+    model.train()  # enable model training
+    epoch_start_idx = 1
 
-bce_criterion = paddle.nn.BCEWithLogitsLoss()
-adam_optimizer = paddle.optimizer.Adam(parameters=model.parameters(), learning_rate=args.lr, beta1=0.9, beta2=0.98)
+    bce_criterion = paddle.nn.BCEWithLogitsLoss()
+    adam_optimizer = paddle.optimizer.Adam(parameters=model.parameters(), learning_rate=args.lr, beta1=0.9, beta2=0.98)
 
-T = 0.0
-t0 = time.time()
-best = 0
+    T = 0.0
+    t0 = time.time()
+    best = 0
 
-for epoch in range(epoch_start_idx, args.num_epochs + 1):
-    for step in range(num_batch):
-        u, seq, time_seq, time_matrix, pos, neg = sampler.next_batch()  # tuples to ndarray
-        u, seq, pos, neg = np.array(u), np.array(seq), np.array(pos), np.array(neg)
-        time_seq, time_matrix = np.array(time_seq), np.array(time_matrix)
-        pos_logits, neg_logits = model(seq, time_matrix, pos, neg)
-        pos_labels, neg_labels = paddle.ones(pos_logits.shape), paddle.zeros(neg_logits.shape)
-        # print("\neye ball check raw_logits:"); print(pos_logits); print(neg_logits) # check pos_logits > 0, neg_logits < 0
-        adam_optimizer.clear_grad()
-        indices = paddle.to_tensor(pos != 0)
-        loss = bce_criterion(paddle.masked_select(pos_logits, indices), paddle.masked_select(pos_labels, indices))
-        loss += bce_criterion(paddle.masked_select(neg_logits, indices), paddle.masked_select(neg_labels, indices))
-        for param in model.item_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
-        for param in model.abs_pos_K_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
-        for param in model.abs_pos_V_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
-        for param in model.time_matrix_K_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
-        for param in model.time_matrix_V_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
-        loss.backward()
-        adam_optimizer.step()
-        print("loss in epoch {} iteration {}: {}".format(epoch, step,
-                                                         loss.item()))  # expected 0.4~0.6 after init few epochs
+    for epoch in range(epoch_start_idx, args.num_epochs + 1):
+        for step in range(num_batch):
+            u, seq, time_seq, time_matrix, pos, neg = sampler.next_batch()  # tuples to ndarray
+            u, seq, pos, neg = np.array(u), np.array(seq), np.array(pos), np.array(neg)
+            time_seq, time_matrix = np.array(time_seq), np.array(time_matrix)
+            pos_logits, neg_logits = model(seq, time_matrix, pos, neg)
+            pos_labels, neg_labels = paddle.ones(pos_logits.shape), paddle.zeros(neg_logits.shape)
+            # print("\neye ball check raw_logits:"); print(pos_logits); print(neg_logits) # check pos_logits > 0, neg_logits < 0
+            adam_optimizer.clear_grad()
+            indices = paddle.to_tensor(pos != 0)
+            loss = bce_criterion(paddle.masked_select(pos_logits, indices), paddle.masked_select(pos_labels, indices))
+            loss += bce_criterion(paddle.masked_select(neg_logits, indices), paddle.masked_select(neg_labels, indices))
+            for param in model.item_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
+            for param in model.abs_pos_K_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
+            for param in model.abs_pos_V_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
+            for param in model.time_matrix_K_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
+            for param in model.time_matrix_V_emb.parameters(): loss += args.l2_emb * paddle.norm(param)
+            loss.backward()
+            adam_optimizer.step()
+            print("loss in epoch {} iteration {}: {}".format(epoch, step,
+                                                             loss.item()))  # expected 0.4~0.6 after init few epochs
 
-    if epoch % 20 == 0:
-        model.eval()
-        t1 = time.time() - t0
-        T += t1
-        print('Evaluating', end='')
-        t_test = evaluate(model, dataset, args)
-        t_valid = evaluate_valid(model, dataset, args)
-        print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f)'
-              % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1]))
-        if t_test[1] > best:
-            best = t_test[1]
-            paddle.save(model.state_dict(), os.path.join(args.dataset + '_' + args.train_dir, 'best_model.pdparams'))
-        f.write(str(t_valid) + ' ' + str(t_test) + '\n')
-        f.flush()
-        t0 = time.time()
-        model.train()
+        if epoch % 20 == 0:
+            model.eval()
+            t1 = time.time() - t0
+            T += t1
+            print('Evaluating', end='')
+            t_test = evaluate(model, dataset, args)
+            t_valid = evaluate_valid(model, dataset, args)
+            print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f)'
+                  % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1]))
+            if t_test[1] > best:
+                best = t_test[1]
+                paddle.save(model.state_dict(),
+                            os.path.join(args.dataset + '_' + args.train_dir, 'best_model.pdparams'))
+            f.write(str(t_valid) + ' ' + str(t_test) + '\n')
+            f.flush()
+            t0 = time.time()
+            model.train()
 
-f.close()
-sampler.close()
-
-print("Export model")
-model.set_state_dict(paddle.load(os.path.join(args.dataset + '_' + args.train_dir, 'best_model.pdparams')))
-paddle.jit.save(
-    model,
-    'PI',
-    input_spec=[
-        paddle.static.InputSpec(shape=seq.shape, dtype='int32'),
-        paddle.static.InputSpec(shape=time_matrix.shape, dtype='int32'),
-        paddle.static.InputSpec(shape=pos.shape, dtype='int32'),
-        paddle.static.InputSpec(shape=neg.shape, dtype='int32'),
-    ])
+    f.close()
+    sampler.close()
