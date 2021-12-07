@@ -1,7 +1,7 @@
 # 模型名称 TiSASRec: Time Interval Aware Self-Attention for Sequential Recommendation
 ## 1. 简介
-但是大多数序列化推荐模型都有一个简化的假设，即这些模型都将交互历史视为一个有顺序的序列，没有考虑这个序列中交互物品之间的时间间隔（即只是建模了时间顺序没有考虑实际上的时间戳）。
-本论文提出的方法TiSASRec (Time Interval Aware Self-Attention for Sequential Recommendation), 不仅考虑物品的绝对位置,还考虑序列中物品之间的时间间隔
+序列推荐系统寻求利用用户交互的顺序，以便根据用户最近所做的事情来预测他们的下一步行动。传统做法中大多数模型所做的假设是将互动历史视为有序的序列，而不考虑每个互动之间的时间间隔。  
+文本提出TiSASRec(时间间隔感知自我注意的序列推荐)，对序列内的交互的时间戳进行建模，以探索不同时间间隔对下一个项目预测的影响。实验结果表明，该方法在稀疏和稠密数据集以及不同评价指标上均优于各种先进的序列模型。
 ## 2. 复现精度
 - 目标精度 (NDCG@10：0.5706，Hit@10：0.8038)
 - 复现 (NDCG@10: 0.5712, HR@10: 0.8055)
@@ -26,14 +26,6 @@ epoch:140, time: 434.958108(s), valid (NDCG@10: 0.5990, HR@10: 0.8227), test (ND
 cd PaddleRec
 bash test_tipc/prepare.sh ./test_tipc/configs/tisas/train_infer_python.txt 'lite_train_lite_infer'
 bash test_tipc/test_train_inference_python.sh ./test_tipc/configs/tisas/train_infer_python.txt 'lite_train_lite_infer'
-```
-## 8. 精度对齐
-```
-python compare.py
-
-# pos_logits的精度误差为2.504792178115167e-07
-# neg_logits的精度误差为2.504792178115167e-07
-# loss的精度误差为2.384185791015625e-07
 ```
 # 引用原论文
 ```
