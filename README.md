@@ -9,7 +9,7 @@
 ml-1m
 ## 4. 环境依赖
 paddlepaddle-gpu=2.2.0
-## 6. 训练评估
+## 5. 训练评估
 ```
 nohup python main.py --dataset=ml-1m --train_dir=default --seed 6 > train.log &
 ```
@@ -21,7 +21,7 @@ epoch:100, time: 310.499432(s), valid (NDCG@10: 0.5938, HR@10: 0.8210), test (ND
 epoch:120, time: 372.769209(s), valid (NDCG@10: 0.5985, HR@10: 0.8222), test (NDCG@10: 0.5732, HR@10: 0.8015)
 epoch:140, time: 434.958108(s), valid (NDCG@10: 0.5990, HR@10: 0.8227), test (NDCG@10: 0.5716, HR@10: 0.8022)
 ```
-## 7. TIPC测试
+## 6. TIPC测试
 ```
 cd PaddleRec
 bash test_tipc/prepare.sh ./test_tipc/configs/tisas/train_infer_python.txt 'lite_train_lite_infer'
